@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dress Me Up — Cute Mini Game</title>
+<style>
+  :root{--bg:#FFF8FF;--card:#FFFFFF;--accent:#FFB6D5;--muted:#8b8b9a}
+  html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Arial}
+  body{background:linear-gradient(180deg,#FFF8FF 0%, #FFF3F8 100%);display:flex;align-items:center;justify-content:center;padding:20px}
+  .wrap{width:1100px;max-width:100%;background:var(--card);border-radius:18px;box-shadow:0 8px 30px rgba(15,15,30,0.08);padding:18px;display:grid;grid-template-columns:360px 1fr;gap:18px}
+  .left{display:flex;flex-direction:column;gap:12px}
+  .panel{background:#fff;border-radius:12px;padding:12px;box-shadow:inset 0 1px 0 rgba(0,0,0,0.02)}
+  h3{margin:0 0 8px 0;font-size:16px;color:#222}
+  .preview{height:520px;display:flex;align-items:center;justify-content:center}
+  .stage{width:280px;height:420px;border-radius:14px;background:linear-gradient(180deg,#FFFFFF,#FFF0F7);display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 6px 18px rgba(255,182,213,0.14)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--accent);border:none;padding:8px 10px;border-radius:10px;color:#61002b;font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid #ffd6e8}
+  .items{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .item{background:#fff;border-radius:10px;padding:8px;display:flex;align-items:center;justify-content:center;cursor:grab;border:1px dashed #ffe6f2}
+  .item:active{cursor:grabbing}
+  .right{display:flex;flex-direction:column;gap:12px}
+  .palette{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .small{font-size:13px;color:var(--muted)}
+  .controls{display:flex;gap:8px;align-items:center}
+  input[type=text]{padding:8px;border-radius:8px;border:1px solid #eee;width:100%}
+  .bottom{display:flex;gap:8px;align-items:center}
+  .credit{font-size:12px;color:var(--muted)}
+  /* cute badges */
+  .badge{display:inline-block;padding:6px 8px;border-radius:999px;background:linear-gradient(90deg,#fff,#fff8f3);box-shadow:0 4px 10px rgba(0,0,0,0.04)}
+  @media(max-width:980px){.wrap{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="left">
+    <div class="panel">
+      <h3>Choose character</h3>
+      <div class="toolbar">
+        <button id="btn-boy">Boy</button>
+        <button id="btn-girl">Girl</button>
+        <button id="btn-both" class="ghost">Both</button>
+        <button id="btn-reset" class="ghost">Reset</button>
+        <button id="btn-download">Download SVG</button>
+      </div>
+    </div>
+
+    <div class="panel" style="flex:1;min-height:200px;overflow:auto">
+      <h3>Clothing & accessories (drag onto figure)</h3>
+      <div class="items" id="items">
+        <!-- items will be injected by JS -->
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Reflection (short)</h3>
+      <input id="input-adj" type="text" placeholder="Type 1–3 words that describe the outfit" />
+      <div style="height:8px"></div>
+      <div class="controls">
+        <button id="btn-save-remark">Save Remark</button>
+        <div id="remark" class="small"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="small">Tips</div>
+      <ul style="margin:6px 0 0 16px;padding:0;color:var(--muted)">
+        <li>Drag items to the figure. Items snap when placed near the body.</li>
+        <li>Switch characters anytime — items persist per character.</li>
+        <li>Download the final composition as an SVG file (good for printing).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="panel preview">
+      <!-- SVG stage -->
+      <svg id="stage" class="stage" viewBox="0 0 280 420" xmlns="http://www.w3.org/2000/svg" aria-label="Dress me up stage">
+        <defs>
+          <filter id="softshadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#ffb6d5" flood-opacity="0.15"/>
+          </filter>
+        </defs>
+        <rect x="0" y="0" width="280" height="420" rx="14" fill="url(#g1)" />
+        <g id="characters" transform="translate(0,0)"></g>
+        <!-- drop zone outline for debugging (hidden) -->
+        <!-- <rect id="dropbox" x="60" y="80" width="160" height="260" fill="none" stroke="#f0a" opacity="0.2"/> -->
+      </svg>
+    </div>
+
+    <div class="panel">
+      <h3>Saved Outfit</h3>
+      <div class="small">Click Download to save current stage as an SVG file. Remark will be embedded.</div>
+      <div class="bottom">
+        <div class="credit">Made with ❤️ — Cute, simple, for classrooms.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Simple Dress Me Up — single-file game
+   Features:
+   - Two characters (boy/girl) + both
+   - Draggable SVG clothing items
+   - Snap near body
+   - Save remark and download combined SVG
+*/
+
+const itemsData = [
+  {id:'shirt1', kind:'top', label:'Striped Tee', svg:`<g data-id='shirt1' transform='translate(0,0)'><rect rx='8' x='-36' y='-24' width='72' height='56' fill='#FFD8E8' stroke='#FFB6D5'/></g>`},
+  {id:'shirt2', kind:'top', label:'Hoodie', svg:`<g data-id='shirt2'><rect rx='10' x='-40' y='-28' width='80' height='64' fill='#FFF0B8' stroke='#FFE58A'/></g>`},
+  {id:'pants1', kind:'bottom', label:'Jeans', svg:`<g data-id='pants1'><rect rx='6' x='-34' y='0' width='68' height='86' fill='#CDE7FF' stroke='#9EC8FF'/></g>`},
+  {id:'skirt1', kind:'bottom', label:'Skirt', svg:`<g data-id='skirt1'><path d='M-36 0 C-20 36 20 36 36 0 Z' fill='#FFD1F0' stroke='#FFA1DF'/></g>`},
+  {id:'shoes1', kind:'shoes', label:'Sneakers', svg:`<g data-id='shoes1'><rect x='-30' y='84' width='28' height='10' rx='4' fill='#E3FFFD'/><rect x='2' y='84' width='28' height='10' rx='4' fill='#D1FFF7'/></g>`},
+  {id:'hat1', kind:'hat', label:'Cap', svg:`<g data-id='hat1'><ellipse cx='0' cy='-44' rx='28' ry='12' fill='#FFD7C2' stroke='#FFB089'/></g>`},
+  {id:'bag1', kind:'acc', label:'Backpack', svg:`<g data-id='bag1'><rect x='-20' y='4' width='40' height='44' rx='6' fill='#E7D7FF' stroke='#C8B3FF'/></g>`},
+  {id:'glasses1', kind:'acc', label:'Glasses', svg:`<g data-id='glasses1'><rect x='-28' y='-6' width='20' height='12' rx='4' fill='#ffffff' stroke='#CAD3FF'/><rect x='8' y='-6' width='20' height='12' rx='4' fill='#ffffff' stroke='#CAD3FF'/><line x1='-8' y1='0' x2='8' y2='0' stroke='#CAD3FF' stroke-width='2'/></g>`}
+];
+
+// characters as SVG groups
+const boySVG = `
+<g id='char-boy' transform='translate(140,190)'>
+  <g id='boy-body'>
+    <circle cx='0' cy='-70' r='30' fill='#FFEFEF' stroke='#FFCDC8'/>
+    <rect x='-28' y='-40' width='56' height='96' rx='12' fill='#FFEDF3' stroke='#FFD1E6' />
+    <circle cx='-10' cy='-78' r='3' fill='#3a2b2b'/> <circle cx='10' cy='-78' r='3' fill='#3a2b2b'/>
+    <path d='M-10 -58 q10 10 20 0' stroke='#3a2b2b' fill='none' stroke-linecap='round'/>
+  </g>
+</g>`;
+
+const girlSVG = `
+<g id='char-girl' transform='translate(140,190)'>
+  <g id='girl-body'>
+    <circle cx='0' cy='-70' r='30' fill='#FFF3FE' stroke='#FFD9F6'/>
+    <rect x='-28' y='-40' width='56' height='96' rx='12' fill='#FFF7F9' stroke='#FFDFEE' />
+    <circle cx='-10' cy='-78' r='3' fill='#3a2b2b'/> <circle cx='10' cy='-78' r='3' fill='#3a2b2b'/>
+    <path d='M-12 -60 q12 16 24 0' stroke='#3a2b2b' fill='none' stroke-linecap='round'/>
+  </g>
+</g>`;
+
+const stage = document.getElementById('stage');
+const charactersGroup = document.getElementById('characters');
+const itemsWrap = document.getElementById('items');
+let currentMode = 'both'; // 'boy' 'girl' 'both'
+let placedPerChar = {boy:[], girl:[]};
+
+function mkItemEl(d){
+  const div = document.createElement('div');
+  div.className='item';
+  div.tabIndex=0;
+  div.dataset.id = d.id;
+  div.dataset.kind = d.kind;
+  div.innerHTML = `<div style='text-align:center'><svg width='110' height='80' viewBox='-60 -60 120 120' xmlns='http://www.w3.org/2000/svg'>${d.svg}</svg><div style='font-size:11px;margin-top:6px;color:#4b2b3a'>${d.label}</div></div>`;
+  // enable pointer drag
+  div.addEventListener('pointerdown', startDragFromPalette);
+  return div;
+}
+
+// populate palette
+itemsData.forEach(d=>itemsWrap.appendChild(mkItemEl(d)));
+
+// render initial characters
+function renderCharacters(){
+  charactersGroup.innerHTML = '';
+  if(currentMode==='boy' || currentMode==='both') charactersGroup.insertAdjacentHTML('beforeend', boySVG);
+  if(currentMode==='girl' || currentMode==='both') charactersGroup.insertAdjacentHTML('beforeend', girlSVG);
+  // create layered groups for clothing per character
+  const boy = document.getElementById('char-boy');
+  const girl = document.getElementById('char-girl');
+  if(boy){
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('id','boy-layer'); boy.appendChild(g);
+    boy.addEventListener('pointerdown',()=>{});
+  }
+  if(girl){
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('id','girl-layer'); girl.appendChild(g);
+  }
+}
+
+renderCharacters();
+
+// Dragging implementation: from palette create a floating SVG element that follows pointer, and on pointerup test snap
+let dragging = null;
+let dragEl = null;
+
+function startDragFromPalette(e){
+  const id = e.currentTarget.dataset.id;
+  const data = itemsData.find(x=>x.id===id);
+  if(!data) return;
+  e.preventDefault();
+  dragging = {id:data.id, kind:data.kind, svg:data.svg};
+  // create floating svg element inside stage
+  const frag = document.createRange().createContextualFragment(`<g class='dragging' transform='translate(140,190)'>${data.svg}</g>`);
+  dragEl = frag.firstElementChild;
+  dragEl.setAttribute('pointer-events','none');
+  stage.appendChild(dragEl);
+  // position at pointer
+  moveDrag(e);
+  window.addEventListener('pointermove', moveDrag);
+  window.addEventListener('pointerup', endDragFromPalette);
+}
+
+function moveDrag(e){
+  if(!dragEl) return;
+  const pt = svgPoint(e.clientX,e.clientY);
+  dragEl.setAttribute('transform',`translate(${pt.x},${pt.y})`);
+}
+
+function endDragFromPalette(e){
+  window.removeEventListener('pointermove', moveDrag);
+  window.removeEventListener('pointerup', endDragFromPalette);
+  if(!dragEl) return;
+  // check nearest character body center
+  const pt = svgPoint(e.clientX,e.clientY);
+  // boy center at (140,190) with body box roughly x:[120..160], y:[110..250]
+  const targets = [];
+  if(document.getElementById('char-boy')) targets.push({id:'boy',x:140,y:190});
+  if(document.getElementById('char-girl')) targets.push({id:'girl',x:140,y:190});
+  let snapped = false;
+  for(const t of targets){
+    const dx = pt.x - t.x; const dy = pt.y - t.y; const dist = Math.sqrt(dx*dx+dy*dy);
+    if(dist < 120){
+      // snap to that character
+      const layer = document.getElementById(t.id+'-layer');
+      if(layer){
+        // create a proper placed group with transform near torso
+        const placed = document.createElementNS('http://www.w3.org/2000/svg','g');
+        placed.innerHTML = dragging.svg; // safe small svg
+        // small offset by kind
+        let offY = 0;
+        if(dragging.kind==='top') offY = -20;
+        if(dragging.kind==='bottom') offY = 40;
+        if(dragging.kind==='shoes') offY = 90;
+        if(dragging.kind==='hat') offY = -90;
+        if(dragging.kind==='acc') offY = 10;
+        placed.setAttribute('transform',`translate(0,${offY})`);
+        // make removable on click
+        placed.addEventListener('click', ()=>{ placed.remove(); });
+        layer.appendChild(placed);
+        // store placed
+        placedPerChar[t.id].push({id:dragging.id, kind:dragging.kind});
+        snapped = true;
+        break;
+      }
+    }
+  }
+  // remove floating element
+  dragEl.remove(); dragEl = null; dragging=null;
+}
+
+// helper to convert client coords to svg coords
+function svgPoint(clientX, clientY){
+  const pt = stage.createSVGPoint(); pt.x=clientX; pt.y=clientY;
+  const ctm = stage.getScreenCTM().inverse();
+  const sp = pt.matrixTransform(ctm);
+  return {x:sp.x,y:sp.y};
+}
+
+// buttons
+document.getElementById('btn-boy').addEventListener('click', ()=>{ currentMode='boy'; renderCharacters(); });
+document.getElementById('btn-girl').addEventListener('click', ()=>{ currentMode='girl'; renderCharacters(); });
+document.getElementById('btn-both').addEventListener('click', ()=>{ currentMode='both'; renderCharacters(); });
+
+document.getElementById('btn-reset').addEventListener('click', ()=>{ renderCharacters(); placedPerChar={boy:[],girl:[]}; document.getElementById('remark').textContent=''; document.getElementById('input-adj').value=''; });
+
+document.getElementById('btn-save-remark').addEventListener('click', ()=>{
+  const v = document.getElementById('input-adj').value.trim();
+  document.getElementById('remark').textContent = v? `"${v}" saved` : '';
+});
+
+// download: serialize the stage svg and trigger download
+document.getElementById('btn-download').addEventListener('click', ()=>{
+  const svgEl = stage.cloneNode(true);
+  // embed remark as text
+  const remark = document.getElementById('input-adj').value.trim();
+  if(remark){
+    const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+    text.setAttribute('x',14); text.setAttribute('y',400); text.setAttribute('font-size',12); text.setAttribute('fill','#6b2b45');
+    text.textContent = remark;
+    svgEl.appendChild(text);
+  }
+  const serializer = new XMLSerializer();
+  let src = serializer.serializeToString(svgEl);
+  // add namespace if missing
+  if(!src.match(/^<svg[^>]+xmlns="http:\/\/www.w3.org\/2000\/svg"/)){
+    src = src.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+  const blob = new Blob([src], {type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='dress-me-up.svg'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 3000);
+});
+
+// small accessibility: keyboard add items (focus to any palette item and press Enter to add to center)
+Array.from(document.querySelectorAll('.item')).forEach(el=>{
+  el.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ const rect = el.getBoundingClientRect(); startDragFromPalette({currentTarget:el,preventDefault:()=>{},clientX:rect.left+20,clientY:rect.top+20}); endDragFromPalette({clientX:rect.left+20,clientY:rect.top+20}); }});
+});
+
+</script>
+</body>
+</html>
